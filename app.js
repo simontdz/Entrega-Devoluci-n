@@ -932,6 +932,22 @@ async function downloadPDF() {
         // Lugar geográfico de entrega
         pdf.text(lugarGeografico, 80, 266.5);
 
+        // Nivel de combustible - aguja rotada según posición del usuario
+        const centerX = 153;
+        const centerY = 240; // Ajustado más arriba
+        const needleLength = 15;
+        
+        // Ajustar el ángulo para que coincida con la orientación del PDF
+        const adjustedAngle = needleAngle - 90; // Rotar 90° para corregir orientación
+        const radians = (adjustedAngle * Math.PI) / 180;
+        const endX = centerX + needleLength * Math.cos(radians);
+        const endY = centerY + needleLength * Math.sin(radians);
+        
+        pdf.setLineWidth(0.5);
+        pdf.setDrawColor(255, 0, 0); // Color rojo
+        pdf.line(centerX, centerY, endX, endY);
+        pdf.setDrawColor(0, 0, 0); // Volver a negro para otras líneas
+
         // Fecha y tipo de entrega
         const [year, month, day] = datetime.split('-');
         pdf.text(`${day}-${month}-${year}`, 156, 15.5);
@@ -941,6 +957,35 @@ async function downloadPDF() {
 
 
 
+        // Agregar imagen de abolladuras con dibujos
+        if (abolladurasCanvas && abolladurasCtx) {
+            const img = document.getElementById('abolladurasImg');
+            
+            // Crear canvas temporal con escala 1:1 para mantener tamaño exacto
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            
+            // Usar dimensiones exactas del canvas original
+            tempCanvas.width = abolladurasCanvas.width;
+            tempCanvas.height = abolladurasCanvas.height;
+            
+            // Copiar solo los dibujos (sin la imagen de fondo)
+            tempCtx.drawImage(abolladurasCanvas, 0, 0);
+            
+            // Calcular escala para mantener proporción 1:1
+            const htmlWidth = img.offsetWidth;
+            const htmlHeight = img.offsetHeight;
+            
+            // Usar valores por defecto si los controles no existen
+            const pdfX = 33; // Valor fijo optimizado
+            const pdfY = 215; // Valor fijo optimizado
+            const pdfWidth = htmlWidth * 0.21; // Escala 1:1 aproximada
+            const pdfHeight = htmlHeight * 0.21;
+            
+            const abolladurasImgData = tempCanvas.toDataURL('image/png');
+            pdf.addImage(abolladurasImgData, 'PNG', pdfX, pdfY, pdfWidth, pdfHeight);
+        }
+
         // Agregar firmas digitales
         if (!signaturePadEntrega.isEmpty()) {
             pdf.addImage(signaturePadEntrega.toDataURL('image/png'), 'PNG', 160, 251, 15, 15);
@@ -949,8 +994,76 @@ async function downloadPDF() {
             pdf.addImage(signaturePadRecepcion.toDataURL('image/png'), 'PNG', 160, 256, 15, 15);
         }
 
+        // Agregar páginas de fotos si hay fotos subidas
+        if (uploadedPhotos.length > 0) {
+            const photosPerPage = 4;
+            const totalPages = Math.ceil(uploadedPhotos.length / photosPerPage);
+            
+            for (let page = 0; page < totalPages; page++) {
+                pdf.addPage();
+                
+                // Cargar imagen de fondo acta2.jpg
+                try {
+                    const acta2Response = await fetch('acta2.jpg');
+                    const acta2Blob = await acta2Response.blob();
+                    const acta2ImageData = await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(reader.result);
+                        reader.onerror = reject;
+                        reader.readAsDataURL(acta2Blob);
+                    });
+                    
+                    // Agregar imagen de fondo
+                    pdf.addImage(acta2ImageData, 'JPEG', 0, 0, 210, 297);
+                } catch (error) {
+                    console.log('No se pudo cargar acta2.jpg, continuando sin fondo');
+                }
+                
+                // Agregar fotos en cuadrícula 2x2
+                const startIndex = page * photosPerPage;
+                const endIndex = Math.min(startIndex + photosPerPage, uploadedPhotos.length);
+                
+                for (let i = startIndex; i < endIndex; i++) {
+                    const photo = uploadedPhotos[i];
+                    const photoIndex = i - startIndex;
+                    
+                    // Posiciones en cuadrícula 2x2
+                    const col = photoIndex % 2;
+                    const row = Math.floor(photoIndex / 2);
+                    
+                    const x = 20 + (col * 85); // 20mm margen + 85mm ancho por foto
+                    const y = 50 + (row * 85); // 50mm desde arriba + 85mm alto por foto
+                    const width = 80;
+                    const height = 80;
+                    
+                    // Crear canvas temporal para aplicar rotación
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    const img = new Image();
+                    
+                    await new Promise((resolve) => {
+                        img.onload = () => {
+                            canvas.width = img.width;
+                            canvas.height = img.height;
+                            
+                            // Aplicar rotación
+                            ctx.translate(canvas.width / 2, canvas.height / 2);
+                            ctx.rotate((photo.rotation * Math.PI) / 180);
+                            ctx.drawImage(img, -img.width / 2, -img.height / 2);
+                            
+                            // Agregar foto rotada al PDF
+                            const rotatedImageData = canvas.toDataURL('image/jpeg', 0.8);
+                            pdf.addImage(rotatedImageData, 'JPEG', x, y, width, height);
+                            resolve();
+                        };
+                        img.src = photo.src;
+                    });
+                }
+            }
+        }
+        
         // Descargar el PDF
-        pdf.save('reporte_incidenteS.pdf');
+        pdf.save('Acta de entrega y devolución.pdf');
     } catch (error) {
         alert('Error al cargar la imagen del reporte: ' + error.message);
     }
@@ -960,3 +1073,150 @@ async function downloadPDF() {
 document.getElementById('clear-entrega').addEventListener('click', clearSignatureEntrega);
 document.getElementById('clear-recepcion').addEventListener('click', clearSignatureRecepcion);
 document.getElementById('download-pdf').addEventListener('click', downloadPDF);
+
+// Control visual del medidor
+let needleAngle = 0;
+const needle = document.getElementById('fuelNeedle');
+
+// Hacer la aguja rotable
+needle.addEventListener('mousedown', (e) => {
+    function onMouseMove(e) {
+        const img = document.getElementById('pdfPreview');
+        const rect = img.getBoundingClientRect();
+        const centerX = rect.left + (rect.width * 0.47);
+        const centerY = rect.top + (rect.height * 0.30) + 70;
+        
+        const deltaX = e.clientX - centerX;
+        const deltaY = e.clientY - centerY;
+        
+        let angle = Math.atan2(deltaY, deltaX) * (180 / Math.PI);
+        
+        // Ajustar para rango -90° a 90° (izquierda a derecha)
+        angle = Math.max(-90, Math.min(90, angle));
+        
+        needleAngle = angle;
+        needle.style.transform = `rotate(${angle}deg)`;
+    }
+    
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', () => {
+        document.removeEventListener('mousemove', onMouseMove);
+    }, { once: true });
+});
+
+// Canvas para dibujar abolladuras
+let abolladurasCanvas, abolladurasCtx;
+let isDrawing = false;
+
+// Inicializar canvas de abolladuras
+function initAbolladurasCanvas() {
+    const img = document.getElementById('abolladurasImg');
+    abolladurasCanvas = document.getElementById('abolladurasCanvas');
+    abolladurasCtx = abolladurasCanvas.getContext('2d');
+    
+    function resizeCanvas() {
+        abolladurasCanvas.width = img.offsetWidth;
+        abolladurasCanvas.height = img.offsetHeight;
+        abolladurasCanvas.style.width = img.offsetWidth + 'px';
+        abolladurasCanvas.style.height = img.offsetHeight + 'px';
+        
+        abolladurasCtx.strokeStyle = 'red';
+        abolladurasCtx.lineWidth = 2;
+        abolladurasCtx.lineCap = 'round';
+    }
+    
+    img.onload = resizeCanvas;
+    if (img.complete) resizeCanvas();
+}
+
+// Eventos de dibujo
+function setupDrawingEvents() {
+    abolladurasCanvas.addEventListener('mousedown', (e) => {
+        isDrawing = true;
+        const rect = abolladurasCanvas.getBoundingClientRect();
+        abolladurasCtx.beginPath();
+        abolladurasCtx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+    });
+    
+    abolladurasCanvas.addEventListener('mousemove', (e) => {
+        if (!isDrawing) return;
+        const rect = abolladurasCanvas.getBoundingClientRect();
+        abolladurasCtx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+        abolladurasCtx.stroke();
+    });
+    
+    abolladurasCanvas.addEventListener('mouseup', () => isDrawing = false);
+}
+
+// Limpiar dibujos
+document.getElementById('clearAbolladuras').addEventListener('click', () => {
+    abolladurasCtx.clearRect(0, 0, abolladurasCanvas.width, abolladurasCanvas.height);
+});
+
+// Variables para manejo de fotos
+let uploadedPhotos = [];
+
+// Manejo de fotos
+document.getElementById('photoInput').addEventListener('change', function(e) {
+    const files = Array.from(e.target.files);
+    
+    files.forEach(file => {
+        if (uploadedPhotos.length >= 16) { // 4 fotos x 4 páginas máximo
+            alert('Máximo 16 fotos permitidas');
+            return;
+        }
+        
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            const photo = {
+                id: Date.now() + Math.random(),
+                src: event.target.result,
+                rotation: 0
+            };
+            uploadedPhotos.push(photo);
+            displayPhotos();
+        };
+        reader.readAsDataURL(file);
+    });
+});
+
+function displayPhotos() {
+    const container = document.getElementById('photoPreview');
+    container.innerHTML = '';
+    
+    uploadedPhotos.forEach((photo, index) => {
+        const col = document.createElement('div');
+        col.className = 'col-md-3 mb-3';
+        
+        col.innerHTML = `
+            <div class="card">
+                <img src="${photo.src}" class="card-img-top" style="height: 150px; object-fit: cover; transform: rotate(${photo.rotation}deg);">
+                <div class="card-body p-2">
+                    <button class="btn btn-sm btn-warning me-1" onclick="rotatePhoto(${index})">Rotar</button>
+                    <button class="btn btn-sm btn-danger" onclick="deletePhoto(${index})">Eliminar</button>
+                </div>
+            </div>
+        `;
+        
+        container.appendChild(col);
+    });
+}
+
+function rotatePhoto(index) {
+    uploadedPhotos[index].rotation += 90;
+    if (uploadedPhotos[index].rotation >= 360) {
+        uploadedPhotos[index].rotation = 0;
+    }
+    displayPhotos();
+}
+
+function deletePhoto(index) {
+    uploadedPhotos.splice(index, 1);
+    displayPhotos();
+}
+
+// Inicializar cuando cargue la página
+window.addEventListener('load', () => {
+    initAbolladurasCanvas();
+    setTimeout(setupDrawingEvents, 100);
+});

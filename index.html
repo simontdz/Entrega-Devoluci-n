@@ -1234,10 +1234,10 @@
                     </div>
                 </div>
 
-                <!-- BARREÑO -->
+                <!-- BARRENO -->
                 <div class="row mb-3 align-items-center">
                     <div class="col-4">
-                        <label class="form-label">Barreño:</label>
+                        <label class="form-label">Barreno:</label>
                     </div>
                     <div class="col-5">
                         <div class="form-check form-check-inline">
@@ -1508,6 +1508,43 @@
                 <div class="col-12">
                     <label for="lugarGeografico" class="form-label">Lugar geográfico de entrega:</label>
                     <input type="text" class="form-control" id="lugarGeografico">
+                </div>
+            </div>
+
+            <!-- AJUSTE VISUAL DE COMBUSTIBLE -->
+            <div class="row mb-3">
+                <div class="col-12">
+                    <label class="form-label">Nivel de combustible (arrastra la línea roja):</label>
+                    <div style="position: relative; display: inline-block; border: 1px solid #ccc;">
+                        <img id="pdfPreview" src="aforador.png" style="max-width: 400px; height: auto;">
+                        <div id="fuelNeedle" style="position: absolute; width: 3px; height: 70px; background: red; transform-origin: bottom center; left: 47%; top: 30%; cursor: grab; border-radius: 2px;"></div>
+                    </div>
+                </div>
+            </div>
+
+
+            
+
+
+            <!-- DIBUJO DE ABOLLADURAS -->
+            <div class="row mb-3">
+                <div class="col-12">
+                    <label class="form-label">Marcar abolladuras (dibuja sobre la imagen):</label>
+                    <div style="position: relative; display: inline-block; border: 1px solid #ccc;">
+                        <img id="abolladurasImg" src="autos.png" style="max-width: 400px; height: auto;">
+                        <canvas id="abolladurasCanvas" style="position: absolute; top: 0; left: 0; cursor: crosshair;"></canvas>
+                    </div>
+                    <br>
+                    <button type="button" id="clearAbolladuras" class="btn btn-secondary mt-2">Limpiar Dibujos</button>
+                </div>
+            </div>
+
+            <!-- SECCIÓN DE FOTOS -->
+            <div class="row mb-3">
+                <div class="col-12">
+                    <label class="form-label">Agregar fotos (máximo 4 por página):</label>
+                    <input type="file" id="photoInput" accept="image/*" multiple class="form-control mb-3">
+                    <div id="photoPreview" class="row"></div>
                 </div>
             </div>
 
