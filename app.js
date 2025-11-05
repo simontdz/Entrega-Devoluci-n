@@ -1002,9 +1002,9 @@ async function downloadPDF() {
             for (let page = 0; page < totalPages; page++) {
                 pdf.addPage();
                 
-                // Cargar imagen de fondo acta2.jpg
+                // Cargar imagen de fondo Acta2.jpg
                 try {
-                    const acta2Response = await fetch('acta2.jpg');
+                    const acta2Response = await fetch('Acta2.jpg');
                     const acta2Blob = await acta2Response.blob();
                     const acta2ImageData = await new Promise((resolve, reject) => {
                         const reader = new FileReader();
@@ -1013,10 +1013,10 @@ async function downloadPDF() {
                         reader.readAsDataURL(acta2Blob);
                     });
                     
-                    // Agregar imagen de fondo
+                    // Agregar imagen de fondo completa
                     pdf.addImage(acta2ImageData, 'JPEG', 0, 0, 210, 297);
                 } catch (error) {
-                    console.log('No se pudo cargar acta2.jpg, continuando sin fondo');
+                    console.log('No se pudo cargar Acta2.jpg, continuando sin fondo');
                 }
                 
                 // Agregar fotos en cuadrícula 2x2
@@ -1078,29 +1078,45 @@ document.getElementById('download-pdf').addEventListener('click', downloadPDF);
 let needleAngle = 0;
 const needle = document.getElementById('fuelNeedle');
 
-// Hacer la aguja rotable
-needle.addEventListener('mousedown', (e) => {
-    function onMouseMove(e) {
-        const img = document.getElementById('pdfPreview');
-        const rect = img.getBoundingClientRect();
-        const centerX = rect.left + (rect.width * 0.47);
-        const centerY = rect.top + (rect.height * 0.30) + 70;
-        
-        const deltaX = e.clientX - centerX;
-        const deltaY = e.clientY - centerY;
-        
-        let angle = Math.atan2(deltaY, deltaX) * (180 / Math.PI);
-        
-        // Ajustar para rango -90° a 90° (izquierda a derecha)
-        angle = Math.max(-90, Math.min(90, angle));
-        
-        needleAngle = angle;
-        needle.style.transform = `rotate(${angle}deg)`;
-    }
+// Función para manejar movimiento (mouse y touch)
+function handleMove(clientX, clientY) {
+    const img = document.getElementById('pdfPreview');
+    const rect = img.getBoundingClientRect();
+    const centerX = rect.left + (rect.width * 0.47);
+    const centerY = rect.top + (rect.height * 0.30) + 70;
     
+    const deltaX = clientX - centerX;
+    const deltaY = clientY - centerY;
+    
+    let angle = Math.atan2(deltaY, deltaX) * (180 / Math.PI);
+    angle = Math.max(-90, Math.min(90, angle));
+    
+    needleAngle = angle;
+    needle.style.transform = `rotate(${angle}deg)`;
+}
+
+// Eventos mouse
+needle.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    function onMouseMove(e) {
+        handleMove(e.clientX, e.clientY);
+    }
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', () => {
         document.removeEventListener('mousemove', onMouseMove);
+    }, { once: true });
+});
+
+// Eventos touch para móviles
+needle.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    function onTouchMove(e) {
+        const touch = e.touches[0];
+        handleMove(touch.clientX, touch.clientY);
+    }
+    document.addEventListener('touchmove', onTouchMove, { passive: false });
+    document.addEventListener('touchend', () => {
+        document.removeEventListener('touchmove', onTouchMove);
     }, { once: true });
 });
 
@@ -1131,21 +1147,62 @@ function initAbolladurasCanvas() {
 
 // Eventos de dibujo
 function setupDrawingEvents() {
+    // Función para obtener coordenadas
+    function getCoords(e, rect) {
+        if (e.touches) {
+            return {
+                x: e.touches[0].clientX - rect.left,
+                y: e.touches[0].clientY - rect.top
+            };
+        }
+        return {
+            x: e.clientX - rect.left,
+            y: e.clientY - rect.top
+        };
+    }
+    
+    // Eventos mouse
     abolladurasCanvas.addEventListener('mousedown', (e) => {
         isDrawing = true;
         const rect = abolladurasCanvas.getBoundingClientRect();
+        const coords = getCoords(e, rect);
         abolladurasCtx.beginPath();
-        abolladurasCtx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+        abolladurasCtx.moveTo(coords.x, coords.y);
     });
     
     abolladurasCanvas.addEventListener('mousemove', (e) => {
         if (!isDrawing) return;
         const rect = abolladurasCanvas.getBoundingClientRect();
-        abolladurasCtx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+        const coords = getCoords(e, rect);
+        abolladurasCtx.lineTo(coords.x, coords.y);
         abolladurasCtx.stroke();
     });
     
     abolladurasCanvas.addEventListener('mouseup', () => isDrawing = false);
+    
+    // Eventos touch para móviles
+    abolladurasCanvas.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        isDrawing = true;
+        const rect = abolladurasCanvas.getBoundingClientRect();
+        const coords = getCoords(e, rect);
+        abolladurasCtx.beginPath();
+        abolladurasCtx.moveTo(coords.x, coords.y);
+    });
+    
+    abolladurasCanvas.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        if (!isDrawing) return;
+        const rect = abolladurasCanvas.getBoundingClientRect();
+        const coords = getCoords(e, rect);
+        abolladurasCtx.lineTo(coords.x, coords.y);
+        abolladurasCtx.stroke();
+    });
+    
+    abolladurasCanvas.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        isDrawing = false;
+    });
 }
 
 // Limpiar dibujos
@@ -1190,7 +1247,9 @@ function displayPhotos() {
         
         col.innerHTML = `
             <div class="card">
-                <img src="${photo.src}" class="card-img-top" style="height: 150px; object-fit: cover; transform: rotate(${photo.rotation}deg);">
+                <div style="height: 150px; overflow: hidden; display: flex; align-items: center; justify-content: center;">
+                    <img src="${photo.src}" style="max-width: 100%; max-height: 100%; object-fit: contain; transform: rotate(${photo.rotation}deg);">
+                </div>
                 <div class="card-body p-2">
                     <button class="btn btn-sm btn-warning me-1" onclick="rotatePhoto(${index})">Rotar</button>
                     <button class="btn btn-sm btn-danger" onclick="deletePhoto(${index})">Eliminar</button>
